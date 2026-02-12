@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ゲストポータル | 西条農業高校</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+      background: #f3f0ec;
+      color: #3a3a3a;
+      -webkit-font-smoothing: antialiased;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+
+  <!-- ============================================================ -->
+  <!-- 🔥 Firebase SDK（利用時にコメントを外してください） -->
+  <!-- ============================================================ -->
+  <!--
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <script>
+    firebase.initializeApp({
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT.appspot.com",
+      messagingSenderId: "000000000000",
+      appId: "YOUR_APP_ID"
+    });
+    const storage = firebase.storage();
+    const db = firebase.firestore();
+  </script>
+  -->
+
+  <script type="text/babel">
+    const { useState, useRef } = React;
+
+    // ============================================================
+    // 📝 イベント設定 — ここを書き換えるだけで内容を変更できます
+    // ============================================================
+    const EVENT_CONFIG = {
+      title: "DX農業研修会 2025",
+      subtitle: "西条農業高校 × ○○高校",
+      date: "2025年3月15日（土）",
+      description:
+        "IoTセンサーを活用したスマート農業の実践体験と、GLOBALG.A.P.認証の取り組みについて交流します。",
+      schedule: [
+        { time: "9:00",  content: "受付・オリエンテーション" },
+        { time: "9:30",  content: "学校紹介・DX取り組み発表" },
+        { time: "10:30", content: "農場見学（IoTセンサー実演）" },
+        { time: "12:00", content: "昼食・交流" },
+        { time: "13:00", content: "ワークショップ" },
+        { time: "15:00", content: "振り返り・アンケート" },
+      ],
+      downloads: [
+        { name: "研修会プログラム.pdf",      size: "2.4 MB", icon: "📄", url: "#" },
+        { name: "学校紹介スライド.pptx",     size: "8.1 MB", icon: "📊", url: "#" },
+        { name: "IoTセンサー資料.pdf",       size: "1.8 MB", icon: "📄", url: "#" },
+        { name: "GLOBALG.A.P.概要.pdf",     size: "3.2 MB", icon: "📄", url: "#" },
+      ],
+      feedbackQuestions: [
+        { id: "satisfaction", label: "今回の研修の満足度", type: "rating" },
+        {
+          id: "useful",
+          label: "最も参考になった内容",
+          type: "select",
+          options: ["DX取り組み発表", "農場見学・IoT実演", "ワークショップ", "交流・意見交換"],
+        },
+        { id: "comment", label: "ご感想・ご意見", type: "textarea" },
+      ],
+    };
+
+    // ============================================================
+    // コンポーネント
+    // ============================================================
+    const tabs = [
+      { id: "info",     label: "案内",       icon: "🏫" },
+      { id: "download", label: "資料",       icon: "📥" },
+      { id: "upload",   label: "提出",       icon: "📤" },
+      { id: "feedback", label: "アンケート", icon: "📝" },
+    ];
+
+    function SectionTitle({ icon, text }) {
+      return (
+        <h2 style={s.sectionTitle}>
+          <span style={{ marginRight: 8 }}>{icon}</span>{text}
+        </h2>
+      );
+    }
+
+    function GuestPortal() {
+      const [activeTab, setActiveTab] = useState("info");
+      const [uploads, setUploads] = useState([]);
+      const [uploadProgress, setUploadProgress] = useState({});
+      const [feedbackData, setFeedbackData] = useState({});
+      const [feedbackSent, setFeedbackSent] = useState(false);
+      const [notification, setNotification] = useState(null);
+      const [dragOver, setDragOver] = useState(false);
+      const fileInputRef = useRef(null);
+
+      const showNotification = (msg, type = "success") => {
+        setNotification({ msg, type });
+        setTimeout(() => setNotification(null), 3000);
+      };
+
+      const formatSize = (bytes) => {
+        if (bytes < 1024) return bytes + " B";
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+        return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+      };
+
+      // --- ファイルアップロード ---
+      const handleFileUpload = (files) => {
+        Array.from(files).forEach((file) => {
+          const id = Date.now() + "-" + Math.random().toString(36).slice(2);
+          setUploads((prev) => [
+            ...prev,
+            { id, name: file.name, size: formatSize(file.size), status: "uploading" },
+          ]);
+
+          // ===== デモ用プログレス =====
+          // Firebase接続時はここを実際のアップロード処理に置換
+          // const ref = storage.ref(`uploads/${EVENT_CONFIG.title}/${file.name}`);
+          // const task = ref.put(file);
+          // task.on('state_changed', snap => { ... }, err => { ... }, () => { ... });
+          let progress = 0;
+          const interval = setInterval(() => {
+            progress += Math.random() * 30 + 10;
+            if (progress >= 100) {
+              progress = 100;
+              clearInterval(interval);
+              setUploads((prev) =>
+                prev.map((u) => (u.id === id ? { ...u, status: "done" } : u))
+              );
+              showNotification(`${file.name} をアップロードしました`);
+            }
+            setUploadProgress((prev) => ({ ...prev, [id]: Math.min(progress, 100) }));
+          }, 300);
+        });
+      };
+
+      const handleDownload = (item) => {
+        if (item.url && item.url !== "#") {
+          window.open(item.url, "_blank");
+        } else {
+          showNotification(`${item.name} のダウンロードを開始します`);
+          // Firebase接続時:
+          // storage.ref(item.path).getDownloadURL().then(url => window.open(url));
+        }
+      };
+
+      const handleFeedbackSubmit = () => {
+        // Firebase接続時:
+        // db.collection("feedback").add({ ...feedbackData, event: EVENT_CONFIG.title, timestamp: new Date() });
+        setFeedbackSent(true);
+        showNotification("アンケートを送信しました。ありがとうございます！");
+      };
+
+      return (
+        <div style={s.container}>
+          {/* ヘッダー */}
+          <header style={s.header}>
+            <div style={s.headerBg} />
+            <div style={s.headerContent}>
+              <div style={s.badge}>GUEST PORTAL</div>
+              <h1 style={s.title}>{EVENT_CONFIG.title}</h1>
+              <p style={s.subtitle}>{EVENT_CONFIG.subtitle}</p>
+              <div style={s.dateBadge}>
+                <span style={{ marginRight: 6 }}>📅</span>
+                {EVENT_CONFIG.date}
+              </div>
+            </div>
+          </header>
+
+          {/* ナビゲーション */}
+          <nav style={s.nav}>
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  ...s.navBtn,
+                  ...(activeTab === tab.id ? s.navBtnActive : {}),
+                }}
+              >
+                <span style={{ fontSize: 18 }}>{tab.icon}</span>
+                <span style={{ fontSize: 11, fontWeight: activeTab === tab.id ? 600 : 400 }}>
+                  {tab.label}
+                </span>
+              </button>
+            ))}
+          </nav>
+
+          {/* メイン */}
+          <main style={s.main}>
+            {notification && (
+              <div
+                style={{
+                  ...s.notification,
+                  background: notification.type === "success" ? "#2d6a4f" : "#c1121f",
+                  animation: "fadeIn 0.3s ease",
+                }}
+              >
+                {notification.type === "success" ? "✓" : "!"} {notification.msg}
+              </div>
+            )}
+
+            {/* === 案内 === */}
+            {activeTab === "info" && (
+              <div style={{ animation: "slideUp 0.3s ease" }}>
+                <SectionTitle icon="📋" text="イベント概要" />
+                <div style={s.card}>
+                  <p style={s.description}>{EVENT_CONFIG.description}</p>
+                </div>
+                <SectionTitle icon="🕐" text="スケジュール" />
+                <div style={s.card}>
+                  {EVENT_CONFIG.schedule.map((item, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        display: "flex", alignItems: "center", padding: "12px 0", gap: 16,
+                        borderBottom: i < EVENT_CONFIG.schedule.length - 1 ? "1px solid #e8e0d4" : "none",
+                      }}
+                    >
+                      <span style={{ fontWeight: 700, fontSize: 14, color: "#588157", minWidth: 50, fontVariantNumeric: "tabular-nums" }}>
+                        {item.time}
+                      </span>
+                      <span style={{ fontSize: 14, color: "#4a4a4a" }}>{item.content}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={s.infoNote}>
+                  <span style={{ fontSize: 20 }}>💡</span>
+                  <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6 }}>
+                    このポータルではログイン不要でご利用いただけます。
+                    資料のダウンロード、ファイルの提出、アンケート回答が可能です。
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* === 資料ダウンロード === */}
+            {activeTab === "download" && (
+              <div style={{ animation: "slideUp 0.3s ease" }}>
+                <SectionTitle icon="📥" text="配布資料" />
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {EVENT_CONFIG.downloads.map((item, i) => (
+                    <div key={i} style={s.fileCard}>
+                      <div style={{ fontSize: 28, width: 40, textAlign: "center", flexShrink: 0 }}>
+                        {item.icon}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#3a3a3a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {item.name}
+                        </div>
+                        <div style={{ fontSize: 11, color: "#999", marginTop: 2 }}>{item.size}</div>
+                      </div>
+                      <button onClick={() => handleDownload(item)} style={s.downloadBtn}>
+                        ダウンロード
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* === アップロード === */}
+            {activeTab === "upload" && (
+              <div style={{ animation: "slideUp 0.3s ease" }}>
+                <SectionTitle icon="📤" text="ファイル提出" />
+                <div
+                  style={{
+                    ...s.dropZone,
+                    borderColor: dragOver ? "#588157" : "#c8bfb0",
+                    background: dragOver ? "#f0f7f0" : "#fff",
+                  }}
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragOver(false);
+                    if (e.dataTransfer.files.length) handleFileUpload(e.dataTransfer.files);
+                  }}
+                >
+                  <div style={{ fontSize: 40, marginBottom: 10 }}>📂</div>
+                  <p style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 600, color: "#4a4a4a", lineHeight: 1.6 }}>
+                    タップしてファイルを選択<br />またはここにドラッグ＆ドロップ
+                  </p>
+                  <p style={{ margin: 0, fontSize: 12, color: "#999" }}>
+                    対応形式: PDF, Word, Excel, 画像, 動画など
+                  </p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    onChange={(e) => { handleFileUpload(e.target.files); e.target.value = ""; }}
+                    style={{ display: "none" }}
+                  />
+                </div>
+
+                {uploads.length > 0 && (
+                  <div style={{ marginTop: 16 }}>
+                    {uploads.map((file) => (
+                      <div key={file.id} style={s.uploadItem}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                          <span style={{ fontSize: 14 }}>
+                            {file.status === "done" ? "✅" : "⏳"} {file.name}
+                          </span>
+                          <span style={{ fontSize: 11, color: "#999" }}>{file.size}</span>
+                        </div>
+                        {file.status === "uploading" && (
+                          <div style={s.progressBar}>
+                            <div style={{ ...s.progressFill, width: `${uploadProgress[file.id] || 0}%` }} />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* === アンケート === */}
+            {activeTab === "feedback" && (
+              <div style={{ animation: "slideUp 0.3s ease" }}>
+                <SectionTitle icon="📝" text="アンケート" />
+                {feedbackSent ? (
+                  <div style={s.thankYou}>
+                    <div style={{ fontSize: 48, marginBottom: 16 }}>🌾</div>
+                    <h3 style={{ margin: "0 0 8px", color: "#2d6a4f" }}>ご回答ありがとうございました！</h3>
+                    <p style={{ margin: 0, color: "#6b705c", fontSize: 14 }}>またのお越しをお待ちしております。</p>
+                  </div>
+                ) : (
+                  <div style={s.card}>
+                    {EVENT_CONFIG.feedbackQuestions.map((q) => (
+                      <div key={q.id} style={{ marginBottom: 24 }}>
+                        <label style={{ display: "block", fontSize: 14, fontWeight: 600, color: "#344e41", marginBottom: 10 }}>
+                          {q.label}
+                        </label>
+
+                        {q.type === "rating" && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            {[1, 2, 3, 4, 5].map((n) => (
+                              <button
+                                key={n}
+                                onClick={() => setFeedbackData((d) => ({ ...d, [q.id]: n }))}
+                                style={{
+                                  width: 42, height: 42, borderRadius: 10, border: "none",
+                                  fontSize: 16, fontWeight: 700, cursor: "pointer",
+                                  transition: "all 0.15s",
+                                  background: feedbackData[q.id] >= n ? "#588157" : "#f0ebe3",
+                                  color: feedbackData[q.id] >= n ? "#fff" : "#6b705c",
+                                }}
+                              >
+                                {n}
+                              </button>
+                            ))}
+                            <span style={{ fontSize: 12, color: "#588157", fontWeight: 500, marginLeft: 4 }}>
+                              {feedbackData[q.id]
+                                ? ["", "不満", "やや不満", "普通", "満足", "大満足"][feedbackData[q.id]]
+                                : ""}
+                            </span>
+                          </div>
+                        )}
+
+                        {q.type === "select" && (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                            {q.options.map((opt) => (
+                              <button
+                                key={opt}
+                                onClick={() => setFeedbackData((d) => ({ ...d, [q.id]: opt }))}
+                                style={{
+                                  padding: "8px 16px", borderRadius: 20, border: "none",
+                                  fontSize: 13, fontWeight: 500, cursor: "pointer",
+                                  transition: "all 0.15s",
+                                  background: feedbackData[q.id] === opt ? "#588157" : "#f0ebe3",
+                                  color: feedbackData[q.id] === opt ? "#fff" : "#4a4a4a",
+                                }}
+                              >
+                                {opt}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {q.type === "textarea" && (
+                          <textarea
+                            value={feedbackData[q.id] || ""}
+                            onChange={(e) => setFeedbackData((d) => ({ ...d, [q.id]: e.target.value }))}
+                            placeholder="ご自由にお書きください..."
+                            rows={4}
+                            style={s.textarea}
+                          />
+                        )}
+                      </div>
+                    ))}
+                    <button onClick={handleFeedbackSubmit} style={s.submitBtn}>
+                      送信する
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </main>
+
+          {/* フッター */}
+          <footer style={s.footer}>
+            <p>愛媛県立西条農業高等学校</p>
+            <p style={{ fontSize: 11, opacity: 0.6 }}>Guest Portal powered by Firebase</p>
+          </footer>
+        </div>
+      );
+    }
+
+    // ============================================================
+    // スタイル定義
+    // ============================================================
+    const s = {
+      container: {
+        maxWidth: 480, margin: "0 auto", background: "#faf8f5", minHeight: "100vh",
+      },
+      header: {
+        position: "relative", overflow: "hidden", padding: "40px 24px 28px",
+      },
+      headerBg: {
+        position: "absolute", inset: 0, zIndex: 0,
+        background: "linear-gradient(135deg, #344e41 0%, #588157 50%, #a3b18a 100%)",
+      },
+      headerContent: {
+        position: "relative", zIndex: 1, textAlign: "center",
+      },
+      badge: {
+        display: "inline-block", padding: "4px 14px", borderRadius: 20,
+        background: "rgba(255,255,255,0.2)", color: "#fff",
+        fontSize: 11, fontWeight: 700, letterSpacing: 2, marginBottom: 14,
+      },
+      title: {
+        margin: "0 0 6px", fontSize: 22, fontWeight: 800, color: "#fff", lineHeight: 1.3,
+      },
+      subtitle: {
+        margin: "0 0 14px", fontSize: 14, color: "rgba(255,255,255,0.85)", fontWeight: 400,
+      },
+      dateBadge: {
+        display: "inline-flex", alignItems: "center", padding: "6px 16px",
+        borderRadius: 20, background: "rgba(255,255,255,0.15)",
+        color: "#fff", fontSize: 13, fontWeight: 500,
+      },
+      nav: {
+        display: "flex", background: "#fff", borderBottom: "1px solid #e8e0d4",
+        position: "sticky", top: 0, zIndex: 10, boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+      },
+      navBtn: {
+        flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
+        gap: 3, padding: "12px 4px 10px", border: "none", background: "none",
+        cursor: "pointer", color: "#999", transition: "all 0.2s",
+        borderBottom: "3px solid transparent", fontSize: 13,
+      },
+      navBtnActive: {
+        color: "#344e41", borderBottom: "3px solid #588157", fontWeight: 600,
+      },
+      main: { padding: "20px 16px 32px" },
+      notification: {
+        padding: "12px 16px", borderRadius: 10, color: "#fff",
+        fontSize: 13, fontWeight: 500, marginBottom: 16,
+      },
+      sectionTitle: {
+        display: "flex", alignItems: "center", fontSize: 16, fontWeight: 700,
+        color: "#344e41", margin: "0 0 12px", padding: 0,
+      },
+      card: {
+        background: "#fff", borderRadius: 14, padding: 20, marginBottom: 20,
+        boxShadow: "0 1px 4px rgba(0,0,0,0.05)", border: "1px solid #ece7df",
+      },
+      description: { margin: 0, fontSize: 14, lineHeight: 1.8, color: "#555" },
+      infoNote: {
+        display: "flex", gap: 12, alignItems: "flex-start", padding: 16,
+        borderRadius: 12, background: "#f0ebe3", border: "1px solid #e0d8cc",
+      },
+      fileCard: {
+        display: "flex", alignItems: "center", gap: 12, background: "#fff",
+        borderRadius: 12, padding: "14px 16px", border: "1px solid #ece7df",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+      },
+      downloadBtn: {
+        padding: "8px 16px", borderRadius: 8, border: "none",
+        background: "#588157", color: "#fff", fontSize: 12,
+        fontWeight: 600, cursor: "pointer", flexShrink: 0,
+      },
+      dropZone: {
+        border: "2px dashed #c8bfb0", borderRadius: 14,
+        padding: "36px 20px", textAlign: "center", cursor: "pointer",
+        transition: "border-color 0.2s, background 0.2s",
+      },
+      uploadItem: {
+        background: "#fff", borderRadius: 10, padding: "12px 16px",
+        marginBottom: 8, border: "1px solid #ece7df",
+      },
+      progressBar: {
+        height: 6, borderRadius: 3, background: "#e8e0d4", overflow: "hidden",
+      },
+      progressFill: {
+        height: "100%", borderRadius: 3,
+        background: "linear-gradient(90deg, #588157, #a3b18a)",
+        transition: "width 0.3s ease",
+      },
+      textarea: {
+        width: "100%", padding: "12px 14px", borderRadius: 10,
+        border: "1px solid #ddd5c9", background: "#faf8f5",
+        fontSize: 14, fontFamily: "inherit", resize: "vertical",
+        outline: "none", boxSizing: "border-box", lineHeight: 1.6,
+      },
+      submitBtn: {
+        width: "100%", padding: 14, borderRadius: 12, border: "none",
+        background: "linear-gradient(135deg, #344e41, #588157)",
+        color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", marginTop: 8,
+      },
+      thankYou: {
+        textAlign: "center", padding: "48px 24px", background: "#fff",
+        borderRadius: 14, border: "1px solid #ece7df",
+      },
+      footer: {
+        textAlign: "center", padding: "20px 16px 28px",
+        fontSize: 12, color: "#999", lineHeight: 1.8,
+      },
+    };
+
+    // ============================================================
+    // マウント
+    // ============================================================
+    ReactDOM.createRoot(document.getElementById("root")).render(<GuestPortal />);
+  </script>
+</body>
+</html>
