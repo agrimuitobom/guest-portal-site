@@ -46,36 +46,34 @@
     const storage = firebase.storage();
     const db = firebase.firestore();
 
-    // デバッグ: Storageの中身を確認
+    // デバッグ: Storageの中身を確認（events/配下のみ）
     (async function debugStorage() {
+      console.log("=== Storage Debug ===");
+      console.log("Bucket:", storage.app.options.storageBucket);
+
+      // events/ フォルダの中身
       try {
-        console.log("=== Storage Debug ===");
-        console.log("Bucket:", storage.app.options.storageBucket);
+        const eventsRef = storage.ref("events");
+        const eventsList = await eventsRef.listAll();
+        console.log("events/ folders:", eventsList.prefixes.map(p => p.fullPath));
+        console.log("events/ files:", eventsList.items.map(i => i.fullPath));
+      } catch(e) { console.log("events/ list error:", e.code, e.message); }
 
-        // ルートのファイル一覧
-        const rootRef = storage.ref();
-        const rootList = await rootRef.listAll();
-        console.log("Root folders:", rootList.prefixes.map(p => p.fullPath));
-        console.log("Root files:", rootList.items.map(i => i.fullPath));
+      // events/dx-workshop-2025/ フォルダの中身
+      try {
+        const workshopRef = storage.ref("events/dx-workshop-2025");
+        const workshopList = await workshopRef.listAll();
+        console.log("events/dx-workshop-2025/ files:");
+        workshopList.items.forEach(item => {
+          console.log("  path:", item.fullPath);
+          console.log("  name:", item.name);
+          console.log("  name bytes:", Array.from(new TextEncoder().encode(item.name)).map(b => b.toString(16)).join(' '));
+        });
+      } catch(e) { console.log("events/dx-workshop-2025/ list error:", e.code, e.message); }
 
-        // events/ フォルダの中身
-        try {
-          const eventsRef = storage.ref("events");
-          const eventsList = await eventsRef.listAll();
-          console.log("events/ folders:", eventsList.prefixes.map(p => p.fullPath));
-          console.log("events/ files:", eventsList.items.map(i => i.fullPath));
-        } catch(e) { console.log("events/ list error:", e.message); }
-
-        // events/dx-workshop-2025/ フォルダの中身
-        try {
-          const workshopRef = storage.ref("events/dx-workshop-2025");
-          const workshopList = await workshopRef.listAll();
-          console.log("events/dx-workshop-2025/ files:", workshopList.items.map(i => i.fullPath));
-        } catch(e) { console.log("events/dx-workshop-2025/ list error:", e.message); }
-
-      } catch(e) {
-        console.log("Debug error:", e.code, e.message);
-      }
+      // コードで使っているパスのバイト列も表示
+      const expectedName = "研修会プログラム.pdf";
+      console.log("Expected name bytes:", Array.from(new TextEncoder().encode(expectedName)).map(b => b.toString(16)).join(' '));
     })();
   </script>
   
