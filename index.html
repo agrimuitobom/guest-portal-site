@@ -45,6 +45,38 @@
     });
     const storage = firebase.storage();
     const db = firebase.firestore();
+
+    // デバッグ: Storageの中身を確認
+    (async function debugStorage() {
+      try {
+        console.log("=== Storage Debug ===");
+        console.log("Bucket:", storage.app.options.storageBucket);
+
+        // ルートのファイル一覧
+        const rootRef = storage.ref();
+        const rootList = await rootRef.listAll();
+        console.log("Root folders:", rootList.prefixes.map(p => p.fullPath));
+        console.log("Root files:", rootList.items.map(i => i.fullPath));
+
+        // events/ フォルダの中身
+        try {
+          const eventsRef = storage.ref("events");
+          const eventsList = await eventsRef.listAll();
+          console.log("events/ folders:", eventsList.prefixes.map(p => p.fullPath));
+          console.log("events/ files:", eventsList.items.map(i => i.fullPath));
+        } catch(e) { console.log("events/ list error:", e.message); }
+
+        // events/dx-workshop-2025/ フォルダの中身
+        try {
+          const workshopRef = storage.ref("events/dx-workshop-2025");
+          const workshopList = await workshopRef.listAll();
+          console.log("events/dx-workshop-2025/ files:", workshopList.items.map(i => i.fullPath));
+        } catch(e) { console.log("events/dx-workshop-2025/ list error:", e.message); }
+
+      } catch(e) {
+        console.log("Debug error:", e.code, e.message);
+      }
+    })();
   </script>
   
 
